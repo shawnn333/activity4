@@ -110,6 +110,30 @@ jobs:
                       i += 1
                   src = src[: marker.start()] + src[i + 1 :]
 
+              # Any remaining "if (pluginRegistrar != null) { ... }"
+              # guard is dead code now that the field is gone (it was
+              # only ever set inside registerWith, which we just
+              # removed) - strip every such block, brace-matched, until
+              # none remain.
+              while True:
+                  guard = re.search(
+                      r"if\s*\(\s*pluginRegistrar\s*!=\s*null\s*\)\s*\{", src
+                  )
+                  if not guard:
+                      break
+                  brace_start = src.find("{", guard.start())
+                  depth = 0
+                  i = brace_start
+                  while i < len(src):
+                      if src[i] == "{":
+                          depth += 1
+                      elif src[i] == "}":
+                          depth -= 1
+                          if depth == 0:
+                              break
+                      i += 1
+                  src = src[: guard.start()] + src[i + 1 :]
+
               if src != original:
                   with open(path, "w") as f:
                       f.write(src)
