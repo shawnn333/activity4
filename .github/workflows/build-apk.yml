@@ -61,6 +61,61 @@ jobs:
             fi
           done
 
+      - name: Strip legacy v1-embedding code from abandoned plugins
+        run: |
+          # nearby_connections' Java source still has a registerWith()
+          # method for Flutter's old "v1 embedding" system, which Flutter
+          # removed the Registrar class for entirely. flutter create has
+          # generated v2-embedding-only apps for years (this one
+          # included), so that method is never actually called - it's
+          # dead code that just needs to stop referencing a class that no
+          # longer exists. Strip it out with proper brace matching so
+          # nested code inside it doesn't break the removal.
+          python3 - <<'PYEOF'
+          import glob, os, re
+
+          pattern = os.path.expanduser(
+              "~/.pub-cache/hosted/pub.dev/nearby_connections-*/android/src/main/**/*.java"
+          )
+          for path in glob.glob(pattern, recursive=True):
+              with open(path, "r") as f:
+                  src = f.read()
+              if "PluginRegistry.Registrar" not in src:
+                  continue
+              original = src
+
+              src = re.sub(
+                  r"(?m)^import io\.flutter\.plugin\.common\.PluginRegistry\.Registrar;\n",
+                  "",
+                  src,
+              )
+              src = re.sub(
+                  r"(?m)^\s*private static PluginRegistry\.Registrar \w+;\n",
+                  "",
+                  src,
+              )
+
+              marker = re.search(r"public static void registerWith\(", src)
+              if marker:
+                  brace_start = src.find("{", marker.start())
+                  depth = 0
+                  i = brace_start
+                  while i < len(src):
+                      if src[i] == "{":
+                          depth += 1
+                      elif src[i] == "}":
+                          depth -= 1
+                          if depth == 0:
+                              break
+                      i += 1
+                  src = src[: marker.start()] + src[i + 1 :]
+
+              if src != original:
+                  with open(path, "w") as f:
+                      f.write(src)
+                  print(f"Stripped v1-embedding code from {path}")
+          PYEOF
+
       - name: Build APK (release)
         run: flutter build apk --release
 
