@@ -32,12 +32,32 @@ jobs:
       - name: Get dependencies
         run: flutter pub get
 
-      - name: Patch abandoned plugins for Gradle 9 (jcenter removal)
+      - name: Patch abandoned plugins for Gradle 9 / AGP 8+ compatibility
         run: |
+          # Fix 1: jcenter() was removed in Gradle 9. Old plugins that
+          # still call it crash before their build.gradle can even be
+          # evaluated. jcenter has redirected to mavenCentral since 2021.
           for f in $(find "$HOME/.pub-cache/hosted/pub.dev" -maxdepth 3 -name "build.gradle" 2>/dev/null); do
             if grep -q "jcenter()" "$f"; then
-              echo "Patching $f"
+              echo "Removing jcenter() in $f"
               sed -i 's/jcenter()/mavenCentral()/g' "$f"
+            fi
+          done
+
+          # Fix 2: AGP 8+ requires every Android module to declare a
+          # `namespace` in build.gradle instead of relying on the
+          # <manifest package="..."> attribute. Old plugins predate this
+          # requirement. Pull the package name out of each plugin's own
+          # manifest and inject it as the namespace if one isn't already
+          # declared.
+          for manifest in $(find "$HOME/.pub-cache/hosted/pub.dev" -maxdepth 5 -path "*/android/src/main/AndroidManifest.xml" 2>/dev/null); do
+            build_gradle="$(dirname "$(dirname "$(dirname "$manifest")")")/build.gradle"
+            if [ -f "$build_gradle" ] && ! grep -q "namespace" "$build_gradle"; then
+              pkg=$(grep -o 'package="[^"]*"' "$manifest" | head -n1 | sed 's/package="//;s/"//')
+              if [ -n "$pkg" ]; then
+                echo "Adding namespace \"$pkg\" to $build_gradle"
+                sed -i "0,/android {/s//android {\n    namespace \"$pkg\"/" "$build_gradle"
+              fi
             fi
           done
 
