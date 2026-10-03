@@ -29,20 +29,6 @@ jobs:
             flutter create --platforms=android .
           fi
 
-      - name: Add Nearby Connections permissions to the app manifest
-        run: |
-          # nearby_connections (Activity 4) needs these declared in the
-          # APP's own manifest, not just the plugin's - the generated
-          # android/ project from `flutter create` above doesn't have
-          # them. Insert right after the opening <manifest ...> tag.
-          MANIFEST="android/app/src/main/AndroidManifest.xml"
-          PERMS='    <uses-permission android:name="android.permission.BLUETOOTH_ADVERTISE" />\n    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />\n    <uses-permission android:name="android.permission.BLUETOOTH_SCAN" />\n    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />\n    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />\n    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />\n    <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />\n    <uses-permission android:name="android.permission.NEARBY_WIFI_DEVICES" />'
-          if ! grep -q "BLUETOOTH_ADVERTISE" "$MANIFEST"; then
-            sed -i "0,/<manifest [^>]*>/s//&\n${PERMS}/" "$MANIFEST"
-            echo "Permissions added:"
-            grep "uses-permission" "$MANIFEST"
-          fi
-
       - name: Get dependencies
         run: flutter pub get
 
