@@ -110,20 +110,23 @@ jobs:
                       i += 1
                   src = src[: marker.start()] + src[i + 1 :]
 
-              # Any remaining "if (pluginRegistrar != null) { ... }"
-              # guard is dead code now that the field is gone (it was
-              # only ever set inside registerWith, which we just
-              # removed) - strip every such block, brace-matched, until
-              # none remain.
+              # Any remaining "if (pluginRegistrar != null) { v1 path }
+              # else { v2 path }" is a dead v1/v2 branch now that the
+              # field is gone. The v1 "if" body is unreachable code to
+              # drop, but the "else" body is the real v2-embedding logic
+              # we need to KEEP - so unwrap it rather than deleting the
+              # whole if/else, falling back to a plain delete only when
+              # there's no else to preserve.
               while True:
                   guard = re.search(
                       r"if\s*\(\s*pluginRegistrar\s*!=\s*null\s*\)\s*\{", src
                   )
                   if not guard:
                       break
-                  brace_start = src.find("{", guard.start())
+
+                  if_brace_start = src.find("{", guard.start())
                   depth = 0
-                  i = brace_start
+                  i = if_brace_start
                   while i < len(src):
                       if src[i] == "{":
                           depth += 1
@@ -132,7 +135,33 @@ jobs:
                           if depth == 0:
                               break
                       i += 1
-                  src = src[: guard.start()] + src[i + 1 :]
+                  if_block_end = i + 1
+
+                  else_match = re.match(r"\s*else\s*\{", src[if_block_end:])
+                  if else_match:
+                      else_brace_start = if_block_end + src[
+                          if_block_end:
+                      ].index("{", else_match.start())
+                      depth = 0
+                      j = else_brace_start
+                      while j < len(src):
+                          if src[j] == "{":
+                              depth += 1
+                          elif src[j] == "}":
+                              depth -= 1
+                              if depth == 0:
+                                  break
+                          j += 1
+                      else_body = src[else_brace_start + 1 : j]
+                      src = (
+                          src[: guard.start()]
+                          + "{"
+                          + else_body
+                          + "}"
+                          + src[j + 1 :]
+                      )
+                  else:
+                      src = src[: guard.start()] + src[if_block_end:]
 
               if src != original:
                   with open(path, "w") as f:
