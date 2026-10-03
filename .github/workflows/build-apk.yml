@@ -61,6 +61,18 @@ jobs:
             fi
           done
 
+          # Fix 3: old plugins hardcode a low compileSdkVersion (e.g. 33).
+          # Modern AndroidX libraries they transitively depend on (window,
+          # core, lifecycle, etc.) require compiling against 34+. Bumping
+          # a library's compileSdk higher is always safe, so just raise
+          # every plugin's to 36 unconditionally.
+          for f in $(find "$HOME/.pub-cache/hosted/pub.dev" -maxdepth 3 -name "build.gradle" 2>/dev/null); do
+            if grep -qE "compileSdkVersion [0-9]+" "$f"; then
+              echo "Bumping compileSdkVersion in $f"
+              sed -i -E 's/compileSdkVersion [0-9]+/compileSdkVersion 36/' "$f"
+            fi
+          done
+
       - name: Strip legacy v1-embedding code from abandoned plugins
         run: |
           # nearby_connections' Java source still has a registerWith()
